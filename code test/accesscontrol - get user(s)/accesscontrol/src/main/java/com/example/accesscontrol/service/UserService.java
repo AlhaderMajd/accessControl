@@ -85,12 +85,6 @@ public class UserService {
         return new GetUsersResponse(users, page, total);
     }
 
-    public UserDto getUserById(Long id) {
-        User user = userRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("User not found with id: " + id));
-        return new UserDto(user.getId(), user.getEmail(), user.isEnabled());
-    }
-
     private boolean isValidEmail(String email) {
         return email != null && email.matches("^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$");
     }
