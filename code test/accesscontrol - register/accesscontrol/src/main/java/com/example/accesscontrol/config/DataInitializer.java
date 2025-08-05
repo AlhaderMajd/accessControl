@@ -45,32 +45,23 @@ public class DataInitializer implements CommandLineRunner {
                     .enabled(true)
                     .build();
 
-            User adminAndMember = User.builder()
-                    .email("adminandmember@example.com")
-                    .password(passwordEncoder.encode("123456"))
-                    .enabled(true)
-                    .build();
-
             User user = User.builder()
                     .email("user@example.com")
                     .password(passwordEncoder.encode("123456"))
-                    .enabled(true)
+                    .enabled(false)
                     .build();
 
             admin = userRepository.save(admin);
-            adminAndMember = userRepository.save(adminAndMember);
             user = userRepository.save(user);
 
             // Assign roles
             userRoleRepository.save(new UserRole(admin.getId(), adminRole.getId()));   // ADMIN
-            userRoleRepository.save(new UserRole(adminAndMember.getId(), adminRole.getId()));   // ADMIN
-            userRoleRepository.save(new UserRole(adminAndMember.getId(), memberRole.getId()));  // MEMBER
+            userRoleRepository.save(new UserRole(admin.getId(), memberRole.getId()));  // MEMBER
             userRoleRepository.save(new UserRole(user.getId(), memberRole.getId()));   // MEMBER
 
 
             System.out.println("✅ Inserted test users and roles:");
-            System.out.println("   admin@example.com [ADMIN]");
-            System.out.println("   adminandmember@example.com [ADMIN, MEMBER]");
+            System.out.println("   admin@example.com [ADMIN, MEMBER]");
             System.out.println("   user@example.com  [MEMBER]");
         }
     }

@@ -1,59 +1,81 @@
 package com.example.accesscontrol.security.jwt;
 
-import com.example.accesscontrol.service.CustomUserDetailsService;
+import com.example.accesscontrol.entity.UserRole;
+import com.example.accesscontrol.repository.UserRepository;
+import com.example.accesscontrol.repository.UserRoleRepository;
+import com.example.accesscontrol.repository.RoleRepository;
 import io.jsonwebtoken.*;
-import io.jsonwebtoken.security.Keys;
-import org.springframework.beans.factory.annotation.Autowired;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Component;
-
-import java.security.Key;
-import java.util.Date;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Component
+@RequiredArgsConstructor
 public class JwtTokenProvider {
 
-    private static final Key SECRET_KEY = Keys.secretKeyFor(SignatureAlgorithm.HS512);
-    private static final long EXPIRATION_TIME = 86400000; // 24h
+    @Value("${jwt.secret}")
+    private String secretKey;
 
-    private final CustomUserDetailsService userDetailsService;
+    private final UserRepository userRepository;
+    private final UserRoleRepository userRoleRepository;
+    private final RoleRepository roleRepository;
 
-    @Autowired
-    public JwtTokenProvider(CustomUserDetailsService userDetailsService) {
-        this.userDetailsService = userDetailsService;
+    @PostConstruct
+    protected void init() {
+        secretKey = Base64.getEncoder().encodeToString(secretKey.getBytes());
     }
 
-    public String generateToken(String username) {
+    public String generateToken(String email) {
+        Claims claims = Jwts.claims().setSubject(email);
         Date now = new Date();
-        Date expiryDate = new Date(now.getTime() + EXPIRATION_TIME);
+        Date expiry = new Date(now.getTime() + 1000 * 60 * 60); // 1 hour
 
         return Jwts.builder()
-                .setSubject(username)
+                .setClaims(claims)
                 .setIssuedAt(now)
-                .setExpiration(expiryDate)
-                .signWith(SECRET_KEY)
+                .setExpiration(expiry)
+                .signWith(SignatureAlgorithm.HS256, secretKey)
                 .compact();
     }
 
     public boolean validateToken(String token) {
         try {
-            Jwts.parserBuilder().setSigningKey(SECRET_KEY).build().parseClaimsJws(token);
+            Jwts.parser().setSigningKey(secretKey).parseClaimsJws(token);
             return true;
-        } catch (JwtException | IllegalArgumentException ex) {
+        } catch (JwtException | IllegalArgumentException e) {
             return false;
         }
     }
 
-    public String getUsernameFromToken(String token) {
-        return Jwts.parserBuilder().setSigningKey(SECRET_KEY)
-                .build().parseClaimsJws(token).getBody().getSubject();
+    public String getEmailFromToken(String token) {
+        return Jwts.parser().setSigningKey(secretKey).parseClaimsJws(token).getBody().getSubject();
     }
 
     public Authentication getAuthentication(String token) {
-        String username = getUsernameFromToken(token);
-        UserDetails userDetails = userDetailsService.loadUserByUsername(username);
-        return new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
+        String email = getEmailFromToken(token);
+
+        // Get user
+        var user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        // Get roles
+        List<UserRole> userRoles = userRoleRepository.findByUserId(user.getId());
+        List<String> roleNames = userRoles.stream()
+                .map(userRole -> roleRepository.findById(userRole.getRoleId())
+                        .orElseThrow(() -> new RuntimeException("Role not found")))
+                .map(role -> "ROLE_" + role.getName()) // Spring Security requires "ROLE_" prefix
+                .toList();
+
+        var authorities = roleNames.stream()
+                .map(SimpleGrantedAuthority::new)
+                .collect(Collectors.toList());
+
+        return new UsernamePasswordAuthenticationToken(user, null, authorities);
     }
 }

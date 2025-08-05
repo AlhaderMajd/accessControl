@@ -24,24 +24,21 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                     HttpServletResponse response,
                                     FilterChain filterChain)
             throws ServletException, IOException {
-
         try {
-            String token = getJwtFromRequest(request);
-            if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
-                Authentication authentication = jwtTokenProvider.getAuthentication(token);
+            String jwt = getJwtFromRequest(request);
+            if (StringUtils.hasText(jwt) && jwtTokenProvider.validateToken(jwt)) {
+                Authentication authentication = jwtTokenProvider.getAuthentication(jwt);
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
-        } catch (Exception ex) {
-            logger.error("Failed to set user authentication from JWT", ex);
+        } catch (Exception e) {
+            logger.error("JWT Filter failed", e);
         }
 
         filterChain.doFilter(request, response);
     }
 
     private String getJwtFromRequest(HttpServletRequest request) {
-        String bearerToken = request.getHeader("Authorization");
-        return (StringUtils.hasText(bearerToken) && bearerToken.startsWith("Bearer "))
-                ? bearerToken.substring(7)
-                : null;
+        String bearer = request.getHeader("Authorization");
+        return (StringUtils.hasText(bearer) && bearer.startsWith("Bearer ")) ? bearer.substring(7) : null;
     }
 }
