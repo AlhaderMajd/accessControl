@@ -1,7 +1,11 @@
 package com.example.accesscontrol.config;
 
+import com.example.accesscontrol.entity.Role;
 import com.example.accesscontrol.entity.User;
+import com.example.accesscontrol.entity.UserRole;
+import com.example.accesscontrol.repository.RoleRepository;
 import com.example.accesscontrol.repository.UserRepository;
+import com.example.accesscontrol.repository.UserRoleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Configuration;
@@ -12,10 +16,28 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 public class DataInitializer implements CommandLineRunner {
 
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
+    private final UserRoleRepository userRoleRepository;
     private final PasswordEncoder passwordEncoder;
 
     @Override
     public void run(String... args) {
+        // Insert roles if missing
+        Role adminRole = roleRepository.findByName("ADMIN").orElse(null);
+        if (adminRole == null) {
+            adminRole = new Role();
+            adminRole.setName("ADMIN");
+            adminRole = roleRepository.save(adminRole);
+        }
+
+        Role memberRole = roleRepository.findByName("MEMBER").orElse(null);
+        if (memberRole == null) {
+            memberRole = new Role();
+            memberRole.setName("MEMBER");
+            memberRole = roleRepository.save(memberRole);
+        }
+
+        // Insert users if none exist
         if (userRepository.count() == 0) {
             User admin = User.builder()
                     .email("admin@example.com")
@@ -29,10 +51,18 @@ public class DataInitializer implements CommandLineRunner {
                     .enabled(false)
                     .build();
 
-            userRepository.save(admin);
-            userRepository.save(user);
+            admin = userRepository.save(admin);
+            user = userRepository.save(user);
 
-            System.out.println("✅ Inserted test users: admin@example.com / user@example.com (password: 123456)");
+            // Assign roles
+            userRoleRepository.save(new UserRole(admin.getId(), adminRole.getId()));   // ADMIN
+            userRoleRepository.save(new UserRole(admin.getId(), memberRole.getId()));  // MEMBER
+            userRoleRepository.save(new UserRole(user.getId(), memberRole.getId()));   // MEMBER
+
+
+            System.out.println("✅ Inserted test users and roles:");
+            System.out.println("   admin@example.com [ADMIN, MEMBER]");
+            System.out.println("   user@example.com  [MEMBER]");
         }
     }
 }

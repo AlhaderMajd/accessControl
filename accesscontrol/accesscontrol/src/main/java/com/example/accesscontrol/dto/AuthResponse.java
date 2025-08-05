@@ -2,6 +2,8 @@ package com.example.accesscontrol.dto;
 
 import lombok.*;
 
+import java.util.List;
+
 @Getter
 @Setter
 @NoArgsConstructor
@@ -10,5 +12,5 @@ import lombok.*;
 public class AuthResponse {
     private String token;
     private Long userId;
-    private String role;
+    private List<String> roles;
 }
