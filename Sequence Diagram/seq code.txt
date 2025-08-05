@@ -1,0 +1,1826 @@
+@startuml
+title Delete Permission(s) API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: DELETE /api/permissions
+note right of Admin
+[
+  3, 4, 7
+]
+end note
+
+alt Invalid or empty ID list
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "No permission IDs provided"
+}
+end note
+end alt
+
+== Remove from role_permissions ==
+System -> DB: DELETE FROM role_permissions WHERE permission_id IN (...)
+
+alt DB error during unlink
+DB --> System: error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to unlink permissions from roles"
+}
+end note
+end alt
+
+DB --> System: success
+
+== Delete from permissions table ==
+System -> DB: DELETE FROM permissions WHERE id IN (...)
+
+alt DB error during deletion
+DB --> System: error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to delete permissions"
+}
+end note
+end alt
+
+DB --> System: success
+
+== Return response ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "Permissions deleted successfully"
+}
+end note
+
+@enduml
+@startuml
+title Update Permission Name API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: PUT /api/permissions/{permissionId}
+note right of Admin
+{
+  "name": "NEW_NAME"
+}
+end note
+
+alt Invalid or missing name
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Permission name is required"
+}
+end note
+end alt
+
+== Validate permission ==
+System -> DB: SELECT * FROM permissions WHERE id = ?
+DB --> System: permission or null
+
+alt Permission not found
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "Permission not found"
+}
+end note
+end alt
+
+== Update permission ==
+System -> DB: UPDATE permissions SET name = ? WHERE id = ?
+
+alt DB error
+DB --> System: error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to update permission"
+}
+end note
+end alt
+
+DB --> System: success
+
+== Return response ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "Permission updated successfully"
+}
+end note
+
+@enduml
+@startuml
+title Get Permission Details API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: GET /api/permissions/{permissionId}
+
+== Validate permission ==
+System -> DB: SELECT * FROM permissions WHERE id = ?
+
+DB --> System: permission or null
+
+alt Permission not found
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "Permission not found"
+}
+end note
+end alt
+
+== Return details ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "id": 1,
+  "name": "READ_USER"
+}
+end note
+
+@enduml
+@startuml
+title Get Permissions API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: GET /api/permissions?page=&size=&search=
+
+alt Invalid query parameters
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Invalid pagination or search parameters"
+}
+end note
+end alt
+
+== Fetch permissions ==
+System -> DB: SELECT * FROM permissions WHERE name LIKE ? LIMIT ? OFFSET ?
+
+alt DB error
+DB --> System: error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to fetch permissions"
+}
+end note
+end alt
+
+DB --> System: list of permissions (maybe empty)
+
+== Return results ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "permissions": [ ... ],
+  "page": 1,
+  "total": 32
+}
+end note
+
+@enduml
+
+@startuml
+title Create Permissions API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: POST /api/permissions
+note right of Admin
+{
+  "permissions": ["READ_USER", "WRITE_USER", ...]
+}
+end note
+
+alt Missing or empty list
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Permission list must not be empty"
+}
+end note
+end alt
+
+== Check for duplicates ==
+System -> DB: SELECT name FROM permissions WHERE name IN (...)
+DB --> System: existing names list
+
+alt Some permissions already exist
+System --> Admin: 409 Conflict
+note over System, Admin
+{
+  "message": "Permissions already exist",
+  "conflicts": ["READ_USER", "WRITE_USER"]
+}
+end note
+end alt
+
+== Insert permissions ==
+System -> DB: INSERT INTO permissions (name) VALUES (...)
+
+alt DB error
+DB --> System: error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to create permissions"
+}
+end note
+end alt
+
+== Success ==
+DB --> System: insert success
+System --> Admin: 201 Created
+note over System, Admin
+{
+  "message": "Permissions created successfully"
+}
+end note
+
+@enduml
+
+@startuml
+title Delete Roles API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: DELETE /api/roles
+note right of Admin
+{
+  "roleIds": [1, 2, 3]
+}
+end note
+
+alt Invalid or empty input
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "No role IDs provided"
+}
+end note
+end alt
+
+== Validate roles ==
+System -> DB: SELECT id FROM roles WHERE id IN (1, 2, 3)
+
+alt Some role IDs not found
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "One or more role IDs do not exist"
+}
+end note
+end alt
+
+== Remove associations ==
+System -> DB: DELETE FROM role_permissions WHERE role_id IN (1,2,3)
+System -> DB: DELETE FROM group_roles WHERE role_id IN (1,2,3)
+System -> DB: DELETE FROM user_roles WHERE role_id IN (1,2,3)
+
+== Delete roles ==
+System -> DB: DELETE FROM roles WHERE id IN (1, 2, 3)
+
+alt Deletion failed
+DB --> System: error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to delete roles"
+}
+end note
+end alt
+
+== Success ==
+DB --> System: deletion success
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "Roles deleted successfully"
+}
+end note
+
+@enduml
+
+@startuml
+title Deassign Roles from Groups API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: POST /api/groups/deassign-roles
+note right of Admin
+{
+  [
+    { "groupId": 1, "roleIds": [1, 2] },
+    { "groupId": 2, "roleIds": [2, 3] }
+  ]
+}
+end note
+
+alt Invalid input
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Invalid or empty input"
+}
+end note
+end alt
+
+== Validate groups and roles ==
+System -> DB: SELECT id FROM groups WHERE id IN (...)
+System -> DB: SELECT id FROM roles WHERE id IN (...)
+
+alt Some IDs not found
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "One or more group or role IDs are invalid"
+}
+end note
+end alt
+
+== Delete group-role mappings ==
+System -> DB: DELETE FROM group_roles WHERE group_id = ? AND role_id IN (...)
+
+alt Deletion failed
+DB --> System: error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to deassign roles from groups"
+}
+end note
+end alt
+
+== Success ==
+DB --> System: deletion success
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "Roles deassigned from groups successfully"
+}
+end note
+
+@enduml
+
+@startuml
+title Assign Roles to Groups API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: POST /api/groups/assign-roles
+note right of Admin
+{
+  [
+    { "groupId": 1, "roleIds": [1, 2] },
+    { "groupId": 2, "roleIds": [2, 3] }
+  ]
+}
+end note
+
+alt Invalid input
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Invalid or empty input"
+}
+end note
+end alt
+
+== Validate groups and roles ==
+System -> DB: SELECT id FROM groups WHERE id IN (...)
+System -> DB: SELECT id FROM roles WHERE id IN (...)
+
+alt Some IDs not found
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "One or more group or role IDs are invalid"
+}
+end note
+end alt
+
+== Insert group-role mappings ==
+System -> DB: INSERT INTO group_roles (group_id, role_id) VALUES (...)
+
+alt Insert failed
+DB --> System: error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to assign roles to groups"
+}
+end note
+end alt
+
+== Success ==
+DB --> System: insertion success
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "Roles assigned to groups successfully"
+}
+end note
+
+@enduml
+
+@startuml
+title Deassign Permissions from Roles API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: POST /api/roles/deassign-permissions
+note right of Admin
+{
+  [
+    { "roleId": 1, "permissionIds": [1, 2] },
+    { "roleId": 2, "permissionIds": [3] }
+  ]
+}
+end note
+
+alt Invalid input
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Invalid or empty input"
+}
+end note
+end alt
+
+== Validate roles and permissions ==
+System -> DB: SELECT id FROM roles WHERE id IN (...)
+System -> DB: SELECT id FROM permissions WHERE id IN (...)
+
+alt Some IDs not found
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "One or more role or permission IDs are invalid"
+}
+end note
+end alt
+
+== Delete role-permission mappings ==
+System -> DB: DELETE FROM role_permissions WHERE (role_id, permission_id) IN (...)
+
+alt Delete failed
+DB --> System: error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to remove permissions"
+}
+end note
+end alt
+
+== Success ==
+DB --> System: deletion success
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "Permissions removed successfully"
+}
+end note
+
+@enduml
+
+@startuml
+title Assign Permissions to Roles API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: POST /api/roles/assign-permissions
+note right of Admin
+{
+  [
+    { "roleId": 1, "permissionIds": [1, 2] },
+    { "roleId": 2, "permissionIds": [2, 3] }
+  ]
+}
+end note
+
+alt Invalid input
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Invalid or empty input"
+}
+end note
+end alt
+
+== Validate roles and permissions ==
+System -> DB: SELECT id FROM roles WHERE id IN (...)
+System -> DB: SELECT id FROM permissions WHERE id IN (...)
+
+alt Some IDs not found
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "One or more role or permission IDs are invalid"
+}
+end note
+end alt
+
+== Assign permissions ==
+System -> DB: INSERT INTO role_permissions (role_id, permission_id) VALUES (...)
+
+alt DB insert failed
+DB --> System: error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to assign permissions"
+}
+end note
+end alt
+
+== Success ==
+DB --> System: insert success
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "Permissions assigned successfully"
+}
+end note
+
+@enduml
+
+@startuml
+title Delete Group(s) API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: DELETE /api/groups (IDs list)
+
+alt Invalid or empty input
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Invalid or empty group IDs list"
+}
+end note
+end alt
+
+== Check existence ==
+System -> DB: SELECT id FROM groups WHERE id IN (…)
+
+alt No groups found
+DB --> System: []
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "No matching groups found"
+}
+end note
+end alt
+
+== Delete relations ==
+System -> DB: DELETE FROM user_groups WHERE group_id IN (…)
+System -> DB: DELETE FROM group_roles WHERE group_id IN (…)
+
+== Delete groups ==
+System -> DB: DELETE FROM groups WHERE id IN (…)
+
+alt DB error during deletion
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to delete group(s)"
+}
+end note
+end alt
+
+== Success ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "Group(s) deleted successfully"
+}
+end note
+
+@enduml
+
+@startuml
+title Update Group Name API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: PUT /api/groups/{groupId} (new name)
+
+alt Invalid input
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Invalid or missing group name"
+}
+end note
+end alt
+
+== Check if group exists ==
+System -> DB: SELECT * FROM groups WHERE id = ?
+DB --> System: group or null
+
+alt Group not found
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "Group not found"
+}
+end note
+end alt
+
+== Update name ==
+System -> DB: UPDATE groups SET name = ? WHERE id = ?
+
+alt Update fails
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to update group"
+}
+end note
+end alt
+
+== Success ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "Group name updated successfully"
+}
+end note
+
+@enduml
+
+@startuml
+title Get Group Details API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: GET /api/groups/{groupId}
+
+== Validate group ==
+System -> DB: SELECT * FROM groups WHERE id = ?
+DB --> System: group or null
+
+alt Group not found
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "Group not found"
+}
+end note
+end alt
+
+== Fetch assigned users ==
+System -> DB: SELECT u.* FROM users u\nJOIN user_groups ug ON u.id = ug.user_id\nWHERE ug.group_id = ?
+
+== Fetch assigned roles ==
+System -> DB: SELECT r.* FROM roles r\nJOIN group_roles gr ON r.id = gr.role_id\nWHERE gr.group_id = ?
+
+== Return group with details ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "group": {
+    "id": ...,
+    "name": "...",
+    "users": [ ... ],
+    "roles": [ ... ]
+  }
+}
+end note
+
+@enduml
+
+
+@startuml
+title Get Groups API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: GET /api/groups?page=0&size=10
+
+alt Invalid query parameters
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Invalid pagination parameters"
+}
+end note
+end alt
+
+== Fetch groups with pagination ==
+System -> DB: SELECT * FROM groups LIMIT ? OFFSET ?
+DB --> System: list of groups (maybe empty)
+
+alt DB error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to fetch groups"
+}
+end note
+end alt
+
+== Return list ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "groups": [ ... ],
+  "page": 0,
+  "total": 40
+}
+end note
+
+@enduml
+
+@startuml
+title Create Groups API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: POST /api/groups\n[ { "name": "Group A" }, { "name": "Group B" } ]
+
+alt Missing or invalid data
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Group names are required"
+}
+end note
+end alt
+
+== Check for duplicate names ==
+System -> DB: SELECT name FROM groups WHERE name IN ("Group A", "Group B")
+DB --> System: existingGroupNames
+
+alt Some names already exist
+System --> Admin: 409 Conflict
+note over System, Admin
+{
+  "message": "Some group names already exist",
+  "conflicts": [ "Group A" ]
+}
+end note
+end alt
+
+== Insert valid groups ==
+System -> DB: INSERT INTO groups (name) VALUES (...), (...)
+DB --> System: result
+
+alt Insert fails
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to create groups"
+}
+end note
+end alt
+
+== Success ==
+System --> Admin: 201 Created
+note over System, Admin
+{
+  "message": "Groups created successfully"
+}
+end note
+
+@enduml
+
+@startuml
+title Update Role Name API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start update ==
+Admin -> System: PUT /api/roles/{roleId} (new name)
+
+alt Invalid input (e.g., empty or too long)
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Invalid role name"
+}
+end note
+end alt
+
+== Check if role exists ==
+System -> DB: SELECT * FROM roles WHERE id = ?
+DB --> System: role or null
+
+alt Role not found
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "Role not found"
+}
+end note
+end alt
+
+== Update role name ==
+System -> DB: UPDATE roles SET name = ? WHERE id = ?
+
+alt DB error (e.g., duplicate name)
+DB --> System: error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Could not update role name"
+}
+end note
+end alt
+
+== Success ==
+DB --> System: update successful
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "Role name updated successfully"
+}
+end note
+
+@enduml
+
+@startuml
+title Get Role with Permissions API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: GET /api/roles/{roleId}
+
+== Validate role existence ==
+System -> DB: SELECT * FROM roles WHERE id = ?
+DB --> System: role or null
+
+alt Role not found
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "Role not found"
+}
+end note
+end alt
+
+== Fetch assigned permissions ==
+System -> DB: SELECT p.* FROM permissions p\nJOIN role_permissions rp ON p.id = rp.permission_id\nWHERE rp.role_id = ?
+
+DB --> System: list of permissions
+
+== Return role details ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "role": {
+    "id": 3,
+    "name": "MODERATOR",
+    "permissions": [ ... ]
+  }
+}
+end note
+
+@enduml
+
+@startuml
+title Get Roles API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: GET /api/roles?search=&page=&size=
+
+alt Invalid query parameters
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Invalid pagination or search parameters"
+}
+end note
+end alt
+
+== Fetch paginated roles ==
+System -> DB: SELECT * FROM roles WHERE name LIKE ? LIMIT ? OFFSET ?
+
+alt DB error
+DB --> System: error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to fetch roles"
+}
+end note
+end alt
+
+DB --> System: list of roles (maybe empty)
+
+== Return results ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "roles": [ ... ],
+  "page": 1,
+  "total": 42
+}
+end note
+
+@enduml
+
+@startuml
+title Create Role(s) API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: POST /api/roles (roles: [{name, permissions}])
+
+== Validate input ==
+System -> System: check role names & format
+alt Invalid input
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Invalid role data"
+}
+end note
+end alt
+
+== Check for duplicates ==
+System -> DB: SELECT name FROM roles WHERE name IN (…)
+DB --> System: existing names
+
+alt Duplicate names
+System --> Admin: 409 Conflict
+note over System, Admin
+{
+  "message": "Some role names already exist"
+}
+end note
+end alt
+
+== Insert roles ==
+System -> DB: INSERT INTO roles (name) VALUES (...)
+DB --> System: inserted role IDs
+
+== Assign permissions (if provided) ==
+alt Permissions provided
+System -> DB: INSERT INTO role_permissions (role_id, permission_id) VALUES (...)
+alt Insert failed
+DB --> System: error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to assign permissions"
+}
+end note
+end alt
+end alt
+
+== Return success ==
+System --> Admin: 201 Created
+note over System, Admin
+{
+  "message": "Roles created successfully",
+  "created": [...]
+}
+end note
+
+@enduml
+
+@startuml
+title Delete Users API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: DELETE /api/users (userIds: [...])
+
+== Validate input ==
+System -> System: validate userIds
+alt Invalid or empty list
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "User ID list is invalid"
+}
+end note
+end alt
+
+== Check users exist ==
+System -> DB: SELECT id FROM users WHERE id IN (…)
+DB --> System: found user IDs
+
+alt Some IDs not found
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "Some users not found"
+}
+end note
+end alt
+
+== Delete relations ==
+System -> DB: DELETE FROM user_roles WHERE user_id IN (…)
+System -> DB: DELETE FROM user_groups WHERE user_id IN (…)
+
+== Delete users ==
+System -> DB: DELETE FROM users WHERE id IN (…)
+DB --> System: delete result
+
+alt DB error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to delete users"
+}
+end note
+end alt
+
+== Return success ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "Users deleted successfully",
+  "deletedCount": N
+}
+end note
+
+@enduml
+
+@startuml
+title Deassign Users from Groups API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: DELETE /api/groups/users/deassign (userIds: [...], groupIds: [...])
+
+== Validate input ==
+System -> System: validate userIds and groupIds
+alt Invalid input
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "User or group list is invalid"
+}
+end note
+end alt
+
+== Check existence ==
+System -> DB: SELECT id FROM users WHERE id IN (…)
+System -> DB: SELECT id FROM groups WHERE id IN (…)
+DB --> System: valid IDs
+
+alt Any ID not found
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "Some users or groups not found"
+}
+end note
+end alt
+
+== Perform delete ==
+System -> DB: DELETE FROM user_groups WHERE user_id IN (…) AND group_id IN (…)
+DB --> System: deleted count
+
+alt DB error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to deassign users from groups"
+}
+end note
+end alt
+
+== Return success ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "Users deassigned from groups successfully",
+  "removedCount": X
+}
+end note
+
+@enduml
+
+@startuml
+title Assign Users to Groups API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: POST /api/groups/users/assign (userIds: [...], groupIds: [...])
+
+== Validate input ==
+System -> System: validate userIds and groupIds
+alt Invalid input
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "User or group list is invalid"
+}
+end note
+end alt
+
+== Check existence ==
+System -> DB: SELECT id FROM users WHERE id IN (…)
+System -> DB: SELECT id FROM groups WHERE id IN (…)
+DB --> System: valid user and group IDs
+
+alt Some IDs not found
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "Some users or groups not found"
+}
+end note
+end alt
+
+== Filter existing assignments ==
+System -> DB: SELECT * FROM user_groups WHERE user_id IN (…) AND group_id IN (…)
+DB --> System: existing assignments
+
+System -> System: remove duplicates
+
+== Bulk assign ==
+System -> DB: INSERT INTO user_groups (user_id, group_id) VALUES (…) for new pairs
+DB --> System: insert result
+
+alt Insert error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to assign users to groups"
+}
+end note
+end alt
+
+== Return success ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "Users assigned to groups successfully",
+  "assignedCount": N
+}
+end note
+
+@enduml
+
+@startuml
+title Deassign Roles from Users API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: DELETE /api/users/roles/deassign (userIds: [...], roleIds: [...])
+
+== Validate input ==
+System -> System: validate userIds and roleIds
+alt Invalid input
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "User or role list is missing or invalid"
+}
+end note
+end alt
+
+== Check existence ==
+System -> DB: SELECT id FROM users WHERE id IN (…)
+System -> DB: SELECT id FROM roles WHERE id IN (…)
+DB --> System: valid IDs
+
+alt Any invalid IDs
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "Some users or roles not found"
+}
+end note
+end alt
+
+== Remove assignments ==
+System -> DB: DELETE FROM user_roles WHERE user_id IN (…) AND role_id IN (…)
+DB --> System: deleted count
+
+alt DB delete error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to deassign roles"
+}
+end note
+end alt
+
+== Return success ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "Roles deassigned successfully",
+  "removedCount": X
+}
+end note
+
+@enduml
+
+@startuml
+title Assign Roles to Users API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: POST /api/users/roles/assign (userIds: [...], roleIds: [...])
+
+== Validate input ==
+System -> System: validate userIds and roleIds
+alt Invalid input
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "User or role list is invalid or empty"
+}
+end note
+end alt
+
+== Check existence ==
+System -> DB: SELECT id FROM users WHERE id IN (…)
+System -> DB: SELECT id FROM roles WHERE id IN (…)
+DB --> System: valid user IDs and role IDs
+
+alt Any invalid IDs
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "Some users or roles not found"
+}
+end note
+end alt
+
+== Filter existing assignments ==
+System -> DB: SELECT * FROM user_roles WHERE user_id IN (…) AND role_id IN (…)
+DB --> System: existing assignments
+
+System -> System: filter out duplicates
+
+== Assign new roles ==
+System -> DB: INSERT INTO user_roles (user_id, role_id) VALUES (…) for new pairs
+DB --> System: insert result
+
+alt Insert failure
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to assign roles"
+}
+end note
+end alt
+
+== Return success ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "Roles assigned successfully",
+  "assignedCount": N
+}
+end note
+
+@enduml
+
+
+@startuml
+title Enable/Disable Users API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: PUT /api/users/status (userIds: [...], enabled: true/false)
+
+== Validate input ==
+System -> System: check userIds list and enabled flag
+alt Invalid input
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "User list or status flag is missing/invalid"
+}
+end note
+end alt
+
+== Check user existence ==
+System -> DB: SELECT id FROM users WHERE id IN (…)
+
+DB --> System: matched IDs
+
+alt No matching users
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "No users found to update"
+}
+end note
+end alt
+
+== Update status ==
+System -> DB: UPDATE users SET enabled = ? WHERE id IN (…)
+DB --> System: rows affected
+
+alt DB update error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to update user status"
+}
+end note
+end alt
+
+== Return success ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "message": "User status updated successfully",
+  "updatedCount": X
+}
+end note
+
+@enduml
+
+@startuml
+title Update User Email API
+
+actor User
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+User -> System: PUT /api/users/email (newEmail)
+
+== Validate input ==
+System -> System: validate newEmail format
+alt Invalid email
+System --> User: 400 Bad Request
+note over System, User
+{
+  "message": "Invalid email format"
+}
+end note
+end alt
+
+== Check if email exists ==
+System -> DB: SELECT COUNT(*) FROM users WHERE email = ?
+DB --> System: count
+
+alt Email already in use
+System --> User: 409 Conflict
+note over System, User
+{
+  "message": "Email already taken"
+}
+end note
+end alt
+
+== Update email ==
+System -> DB: UPDATE users SET email = ? WHERE id = ?
+DB --> System: success or failure
+
+alt DB update error
+System --> User: 500 Internal Server Error
+note over System, User
+{
+  "message": "Failed to update email"
+}
+end note
+end alt
+
+== Return success ==
+System --> User: 200 OK
+note over System, User
+{
+  "message": "Email updated successfully"
+}
+end note
+
+@enduml
+
+@startuml
+title Change User Password API
+
+actor User
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+User -> System: PUT /api/users/change-password (oldPassword, newPassword)
+
+== Validate input ==
+System -> System: validate format and strength of newPassword
+alt Invalid input
+System --> User: 400 Bad Request
+note over System, User
+{
+  "message": "Password must meet security requirements"
+}
+end note
+end alt
+
+== Fetch current user ==
+System -> DB: SELECT * FROM users WHERE id = ?
+DB --> System: user
+
+== Verify old password ==
+System -> System: check oldPassword against stored hash
+alt Incorrect password
+System --> User: 401 Unauthorized
+note over System, User
+{
+  "message": "Old password is incorrect"
+}
+end note
+end alt
+
+== Update password ==
+System -> DB: UPDATE users SET password = ? WHERE id = ?
+DB --> System: success or failure
+
+alt Update failed
+System --> User: 500 Internal Server Error
+note over System, User
+{
+  "message": "Failed to update password"
+}
+end note
+end alt
+
+== Return success ==
+System --> User: 200 OK
+note over System, User
+{
+  "message": "Password updated successfully"
+}
+end note
+
+@enduml
+
+@startuml
+title Get User Details API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: GET /api/users/{id}
+
+== Validate ID ==
+System -> System: validate path variable
+
+alt Invalid ID format
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Invalid user ID"
+}
+end note
+end alt
+
+== Fetch user ==
+System -> DB: SELECT * FROM users WHERE id = ?
+DB --> System: user or null
+
+alt User not found
+System --> Admin: 404 Not Found
+note over System, Admin
+{
+  "message": "User not found"
+}
+end note
+end alt
+
+== Fetch user roles ==
+System -> DB: SELECT r.* FROM roles r JOIN user_roles ur ON r.id = ur.role_id WHERE ur.user_id = ?
+DB --> System: roles list
+
+== Fetch user groups ==
+System -> DB: SELECT g.* FROM groups g JOIN user_groups ug ON g.id = ug.group_id WHERE ug.user_id = ?
+DB --> System: groups list
+
+== Return response ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "id": 123,
+  "email": "user@example.com",
+  "enabled": true,
+  "roles": [ ... ],
+  "groups": [ ... ]
+}
+end note
+
+@enduml
+
+@startuml
+title Get Users API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: GET /api/users?search=&page=&size=
+
+== Validate query params ==
+System -> System: validate search, page, and size
+alt Invalid parameters
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Invalid pagination or search parameters"
+}
+end note
+end alt
+
+== Fetch filtered users with pagination ==
+System -> DB: SELECT * FROM users WHERE email LIKE ? LIMIT ? OFFSET ?
+alt DB error
+DB --> System: error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to fetch users"
+}
+end note
+end alt
+
+DB --> System: list of users (possibly empty)
+
+== Return response ==
+System --> Admin: 200 OK
+note over System, Admin
+{
+  "users": [ ... ],
+  "page": 0,
+  "total": 124
+}
+end note
+
+@enduml
+
+@startuml
+title Create User(s) API
+
+actor Admin
+participant "System" as System
+database "Database" as DB
+
+== Start request ==
+Admin -> System: POST /api/users (list of users)
+
+== Validate input ==
+System -> System: validate user fields for each user
+alt Invalid input format
+System --> Admin: 400 Bad Request
+note over System, Admin
+{
+  "message": "Invalid user input"
+}
+end note
+end alt
+
+== Check for duplicate emails ==
+System -> DB: SELECT email FROM users WHERE email IN (bulk list)
+DB --> System: existing emails list
+
+alt Some emails already exist
+System --> Admin: 409 Conflict
+note over System, Admin
+{
+  "message": "Some emails already in use",
+  "conflicts": ["test1@example.com", "test2@example.com"]
+}
+end note
+end alt
+
+== Hash passwords ==
+System -> System: hash passwords for each user
+
+== Bulk insert users ==
+System -> DB: INSERT INTO users (email, password, enabled) VALUES (...)
+
+alt Insert failed
+DB --> System: error
+System --> Admin: 500 Internal Server Error
+note over System, Admin
+{
+  "message": "Failed to create users"
+}
+end note
+end alt
+
+DB --> System: success (return inserted IDs)
+
+== Return success ==
+System --> Admin: 201 Created
+note over System, Admin
+{
+  "createdUserIds": [101, 102, 103]
+}
+end note
+
+@enduml
+
+@startuml
+title Register API
+
+actor User
+participant "System" as System
+database "Database" as DB
+
+== Start Registration ==
+User -> System: POST /api/auth/register (email, password)
+
+== Validate input ==
+System -> System: validate email and password
+alt Invalid input
+System --> User: 400 Bad Request
+note over System, User
+{
+  "message": "Invalid email or password format"
+}
+end note
+end alt
+
+== Check existing user ==
+System -> DB: SELECT * FROM users WHERE email = ?
+DB --> System: user or null
+
+alt Email already registered
+System --> User: 409 Conflict
+note over System, User
+{
+  "message": "Email already in use"
+}
+end note
+end alt
+
+== Create new user ==
+System -> System: hashPassword()
+System -> DB: INSERT INTO users (email, password, enabled) VALUES (?, hashedPassword, true)
+
+alt Insert failed
+DB --> System: error
+System --> User: 500 Internal Server Error
+note over System, User
+{
+  "message": "Failed to register user"
+}
+end note
+end alt
+
+DB --> System: success
+
+== Generate JWT ==
+System -> System: generate JWT for new user
+
+== Return success ==
+System --> User: 201 Created
+note over System, User
+{
+  "token": "...",
+  "userId": 42,
+  "role": "MEMBER"
+}
+end note
+
+@enduml
+
+@startuml
+title Login API
+
+actor User
+participant "System" as System
+database "Database" as DB
+
+== Start Login ==
+User -> System: POST /api/auth/login (email, password)
+
+== Fetch user ==
+System -> DB: SELECT * FROM users WHERE email = ?
+DB --> System: user or null
+
+alt User not found
+System --> User: 404 Not Found
+note over System, User
+{
+  "message": "User not found"
+}
+end note
+end alt
+
+== Password validation ==
+System -> System: verifyPassword()
+alt Invalid password
+System --> User: 401 Unauthorized
+note over System, User
+{
+  "message": "Invalid credentials"
+}
+end note
+end alt
+
+== Account check ==
+System -> System: isUserEnabled()
+alt Disabled user
+System --> User: 403 Forbidden
+note over System, User
+{
+  "message": "User is disabled"
+}
+end note
+end alt
+
+== Generate JWT ==
+System -> System: generateToken()
+System --> User: 200 OK
+note over System, User
+{
+  "token": "...",
+  "userId": 42,
+  "role": "ADMIN"
+}
+end note
+
+@enduml

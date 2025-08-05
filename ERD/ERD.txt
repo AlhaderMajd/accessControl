@@ -1,0 +1,45 @@
+Table users {
+  id BIGINT [pk, increment]
+  email VARCHAR(150) [unique, not null]
+  password VARCHAR(255) [not null]
+  enabled BOOLEAN [not null, default: true]
+}
+
+Table roles {
+  id BIGINT [pk, increment]
+  name VARCHAR(100) [unique, not null]
+}
+
+Table permissions {
+  id BIGINT [pk, increment]
+  name VARCHAR(100) [unique, not null]
+}
+
+Table groups {
+  id BIGINT [pk, increment]
+  name VARCHAR(100) [unique, not null]
+}
+
+Table user_roles {
+  user_id BIGINT [ref: > users.id]
+  role_id BIGINT [ref: > roles.id]
+  Note: "Many-to-Many between users and roles"
+}
+
+Table user_groups {
+  user_id BIGINT [ref: > users.id]
+  group_id BIGINT [ref: > groups.id]
+  Note: "Many-to-Many between users and groups"
+}
+
+Table group_roles {
+  group_id BIGINT [ref: > groups.id]
+  role_id BIGINT [ref: > roles.id]
+  Note: "Many-to-Many between groups and roles"
+}
+
+Table role_permissions {
+  role_id BIGINT [ref: > roles.id]
+  permission_id BIGINT [ref: > permissions.id]
+  Note: "Many-to-Many between roles and permissions"
+}

@@ -1,0 +1,35 @@
+login 
+register
+create user(s)
+get users
+get user details
+change user password
+update user email
+enable/disable user(s)
+assign role(s) to user(s)
+deassign role(s) form user(s)
+assign user(s) to group(s)
+deassign user(s) form group(s)
+delete user(s)
+
+create role(s)
+get roles
+get role details
+update role name
+assign permission(s) to role(s)  
+deassign permission(s) form role(s)
+assign role(s) to group(s)
+deassign roles(s) to group(s)
+delete role(s)
+
+create group(s)
+get groups
+get group details
+update group name
+delete group(s)
+
+create permission(s)
+get permissions
+get permission details
+update permission name
+delete permission(s)

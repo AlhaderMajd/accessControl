@@ -1,0 +1,32 @@
+first project:
+-login
+-registration
+-forget pass
+-update profile
+-change password
+-user management:
+	-add user
+	-update user
+	-enable/disable user
+	-read:
+		-details
+		-list/search(filter) + pagination
+		-JPT :
+			-lock mechanism
+			-Relations(m-m, 1-m, 1-1)
+			-n + 1 problem
+-user group crud:
+	-assign user/s
+	-deassign user/s
+-role management
+	-crud
+	-de/assign user
+	-de/assign group
+	-assign permission 
+-permission 
+	-crud
+-globule exception 
+-logs
+-auth + jwt
+cookies session
+-mysql

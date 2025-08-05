@@ -1,0 +1,563 @@
+@startuml
+
+title Login API - JWT Authentication Flow
+
+actor Client
+participant "AuthController" as Controller
+participant "AuthService" as Service
+participant "UserRepository" as Repo
+participant "JwtTokenProvider" as JWT
+database "Database" as DB
+
+Client -> Controller: POST /api/auth/login (email, password)
+Controller -> Service: authenticate(email, password)
+Service -> Repo: findByEmail(email)
+Repo -> DB: SELECT * FROM users WHERE email = ?
+DB --> Repo: User
+Service -> Service: verifyPassword(input, storedHash)
+Service -> JWT: generateToken(User)
+JWT --> Service: JWT Token
+Service --> Controller: AuthResponse(token, user info)
+Controller --> Client: HTTP 200 OK
+
+@enduml
+
+@startuml
+
+title Register API - Create New User Account
+
+actor Client
+participant "AuthController" as Controller
+participant "AuthService" as Service
+participant "UserRepository" as Repo
+participant "PasswordEncoder" as Encoder
+database "Database" as DB
+
+Client -> Controller: POST /api/auth/register (email, password)
+Controller -> Service: registerUser(email, password)
+Service -> Repo: existsByEmail(email)
+Repo -> DB: SELECT * FROM users WHERE email = ?
+DB --> Repo: false
+Service -> Encoder: encode(password)
+Encoder --> Service: hashedPassword
+Service -> Repo: save(newUser)
+Repo -> DB: INSERT INTO users ...
+Service --> Controller: return success message
+Controller --> Client: HTTP 201 Created
+
+@enduml
+
+@startuml
+
+title Forgot Password API - Send Reset Link
+
+actor Client
+participant "AuthController" as Controller
+participant "AuthService" as Service
+participant "UserRepository" as Repo
+participant "EmailService" as Email
+database "Database" as DB
+
+Client -> Controller: POST /api/auth/forgot-password (email)
+Controller -> Service: processForgotPassword(email)
+Service -> Repo: findByEmail(email)
+Repo -> DB: SELECT * FROM users WHERE email = ?
+DB --> Repo: User
+Service -> Service: generateResetToken()
+Service -> Repo: saveResetToken(user, token)
+Repo -> DB: UPDATE users SET reset_token = ...
+Service -> Email: sendResetEmail(email, token)
+Email --> Service: success
+Service --> Controller: return confirmation
+Controller --> Client: HTTP 200 OK
+
+@enduml
+
+@startuml
+
+title Change Password API - Authenticated User
+
+actor Client
+participant "UserController" as Controller
+participant "UserService" as Service
+participant "UserRepository" as Repo
+participant "PasswordEncoder" as Encoder
+database "Database" as DB
+
+Client -> Controller: PUT /api/users/change-password (oldPassword, newPassword)
+Controller -> Service: changePassword(userId, oldPassword, newPassword)
+Service -> Repo: findById(userId)
+Repo -> DB: SELECT * FROM users WHERE id = ?
+DB --> Repo: User
+Service -> Encoder: matches(oldPassword, user.password)
+Encoder --> Service: true
+Service -> Encoder: encode(newPassword)
+Encoder --> Service: hashedPassword
+Service -> Repo: save(updatedUser)
+Repo -> DB: UPDATE users SET password = ?
+Service --> Controller: return success
+Controller --> Client: HTTP 200 OK
+
+@enduml
+
+@startuml
+
+title Update Profile API - Authenticated User
+
+actor Client
+participant "UserController" as Controller
+participant "UserService" as Service
+participant "UserRepository" as Repo
+database "Database" as DB
+
+Client -> Controller: PUT /api/users/profile (updated profile data)
+Controller -> Service: updateProfile(userId, updatedData)
+Service -> Repo: findById(userId)
+Repo -> DB: SELECT * FROM users WHERE id = ?
+DB --> Repo: User
+Service -> Service: update fields (name, phone, etc.)
+Service -> Repo: save(updatedUser)
+Repo -> DB: UPDATE users SET ... WHERE id = ?
+Service --> Controller: return success
+Controller --> Client: HTTP 200 OK
+
+@enduml
+
+@startuml
+
+title Enable/Disable User API - Admin Only
+
+actor AdminClient
+participant "UserController" as Controller
+participant "UserService" as Service
+participant "UserRepository" as Repo
+database "Database" as DB
+
+AdminClient -> Controller: PUT /api/users/{id}/status (enabled: true/false)
+Controller -> Service: updateUserStatus(userId, enabled)
+Service -> Repo: findById(userId)
+Repo -> DB: SELECT * FROM users WHERE id = ?
+DB --> Repo: User
+Service -> Repo: save(updatedUser with enabled flag)
+Repo -> DB: UPDATE users SET enabled = ? WHERE id = ?
+Service --> Controller: return confirmation
+Controller --> AdminClient: HTTP 200 OK
+
+@enduml
+
+@startuml
+
+title Get All Users API - With Filtering and Pagination
+
+actor AdminClient
+participant "UserController" as Controller
+participant "UserService" as Service
+participant "UserRepository" as Repo
+database "Database" as DB
+
+AdminClient -> Controller: GET /api/users?search=...&page=...&size=...
+Controller -> Service: getAllUsers(search, pageable)
+Service -> Repo: findUsersByCriteria(search, pageable)
+Repo -> DB: SELECT * FROM users WHERE ... LIMIT ... OFFSET ...
+DB --> Repo: Paged list of users
+Repo --> Service: return List<User>
+Service --> Controller: return List<UserDTO>
+Controller --> AdminClient: HTTP 200 OK (with paginated users)
+
+@enduml
+
+@startuml
+
+title Get User By ID API - View User Details
+
+actor Client
+participant "UserController" as Controller
+participant "UserService" as Service
+participant "UserRepository" as Repo
+database "Database" as DB
+
+Client -> Controller: GET /api/users/{id}
+Controller -> Service: getUserById(id)
+Service -> Repo: findById(id)
+Repo -> DB: SELECT * FROM users WHERE id = ?
+DB --> Repo: return User
+Repo --> Service: return User
+Service --> Controller: return UserDTO
+Controller --> Client: HTTP 200 OK
+
+@enduml
+
+@startuml
+
+title Assign/Deassign User to/from Group API
+
+actor AdminClient
+participant "GroupController" as Controller
+participant "GroupService" as Service
+participant "GroupRepository" as GroupRepo
+participant "UserRepository" as UserRepo
+database "Database" as DB
+
+== Assign ==
+
+AdminClient -> Controller: POST /api/groups/{groupId}/users/{userId}
+Controller -> Service: assignUserToGroup(userId, groupId)
+Service -> UserRepo: findById(userId)
+UserRepo -> DB: SELECT * FROM users WHERE id = ?
+DB --> UserRepo: User
+Service -> GroupRepo: findById(groupId)
+GroupRepo -> DB: SELECT * FROM groups WHERE id = ?
+DB --> GroupRepo: Group
+Service -> GroupRepo: add user to group (via join table)
+GroupRepo -> DB: INSERT INTO user_groups ...
+Service --> Controller: return success
+Controller --> AdminClient: HTTP 200 OK
+
+== Deassign ==
+
+AdminClient -> Controller: DELETE /api/groups/{groupId}/users/{userId}
+Controller -> Service: removeUserFromGroup(userId, groupId)
+Service -> GroupRepo: remove user from group (via join table)
+GroupRepo -> DB: DELETE FROM user_groups WHERE ...
+Service --> Controller: return success
+Controller --> AdminClient: HTTP 200 OK
+
+@enduml
+
+@startuml
+
+title Assign/Deassign Role to/from User API
+
+actor AdminClient
+participant "UserController" as Controller
+participant "UserService" as Service
+participant "UserRepository" as UserRepo
+participant "RoleRepository" as RoleRepo
+database "Database" as DB
+
+== Assign ==
+
+AdminClient -> Controller: POST /api/users/{userId}/roles/{roleId}
+Controller -> Service: assignRoleToUser(userId, roleId)
+Service -> UserRepo: findById(userId)
+UserRepo -> DB: SELECT * FROM users WHERE id = ?
+DB --> UserRepo: User
+Service -> RoleRepo: findById(roleId)
+RoleRepo -> DB: SELECT * FROM roles WHERE id = ?
+DB --> RoleRepo: Role
+Service -> UserRepo: save(user with role added)
+UserRepo -> DB: INSERT INTO user_roles ...
+Service --> Controller: return success
+Controller --> AdminClient: HTTP 200 OK
+
+== Deassign ==
+
+AdminClient -> Controller: DELETE /api/users/{userId}/roles/{roleId}
+Controller -> Service: removeRoleFromUser(userId, roleId)
+Service -> UserRepo: remove role from user
+UserRepo -> DB: DELETE FROM user_roles WHERE ...
+Service --> Controller: return success
+Controller --> AdminClient: HTTP 200 OK
+
+@enduml
+
+@startuml
+
+title Group CRUD APIs
+
+actor AdminClient
+participant "GroupController" as Controller
+participant "GroupService" as Service
+participant "GroupRepository" as Repo
+database "Database" as DB
+
+== Create Group ==
+
+AdminClient -> Controller: POST /api/groups (name, description)
+Controller -> Service: createGroup(data)
+Service -> Repo: save(group)
+Repo -> DB: INSERT INTO groups ...
+Service --> Controller: return group info
+Controller --> AdminClient: HTTP 201 Created
+
+== Update Group ==
+
+AdminClient -> Controller: PUT /api/groups/{id}
+Controller -> Service: updateGroup(id, data)
+Service -> Repo: findById(id)
+Repo -> DB: SELECT * FROM groups WHERE id = ?
+Service -> Repo: save(updatedGroup)
+Repo -> DB: UPDATE groups SET ...
+Controller --> AdminClient: HTTP 200 OK
+
+== Delete Group ==
+
+AdminClient -> Controller: DELETE /api/groups/{id}
+Controller -> Service: deleteGroup(id)
+Service -> Repo: deleteById(id)
+Repo -> DB: DELETE FROM groups WHERE id = ?
+Controller --> AdminClient: HTTP 204 No Content
+
+== Get Group By ID ==
+
+AdminClient -> Controller: GET /api/groups/{id}
+Controller -> Service: getGroup(id)
+Service -> Repo: findById(id)
+Repo -> DB: SELECT * FROM groups WHERE id = ?
+Controller --> AdminClient: HTTP 200 OK
+
+== List Groups ==
+
+AdminClient -> Controller: GET /api/groups
+Controller -> Service: getAllGroups()
+Service -> Repo: findAll()
+Repo -> DB: SELECT * FROM groups
+Controller --> AdminClient: HTTP 200 OK
+
+@enduml
+
+@startuml
+
+title Role CRUD APIs
+
+actor AdminClient
+participant "RoleController" as Controller
+participant "RoleService" as Service
+participant "RoleRepository" as Repo
+database "Database" as DB
+
+== Create Role ==
+
+AdminClient -> Controller: POST /api/roles (name)
+Controller -> Service: createRole(data)
+Service -> Repo: save(role)
+Repo -> DB: INSERT INTO roles ...
+Controller --> AdminClient: HTTP 201 Created
+
+== Update Role ==
+
+AdminClient -> Controller: PUT /api/roles/{id}
+Controller -> Service: updateRole(id, data)
+Service -> Repo: findById(id)
+Repo -> DB: SELECT * FROM roles WHERE id = ?
+Service -> Repo: save(updatedRole)
+Repo -> DB: UPDATE roles SET ...
+Controller --> AdminClient: HTTP 200 OK
+
+== Delete Role ==
+
+AdminClient -> Controller: DELETE /api/roles/{id}
+Controller -> Service: deleteRole(id)
+Service -> Repo: deleteById(id)
+Repo -> DB: DELETE FROM roles WHERE id = ?
+Controller --> AdminClient: HTTP 204 No Content
+
+== Get Role By ID ==
+
+AdminClient -> Controller: GET /api/roles/{id}
+Controller -> Service: getRole(id)
+Service -> Repo: findById(id)
+Repo -> DB: SELECT * FROM roles WHERE id = ?
+Controller --> AdminClient: HTTP 200 OK
+
+== List Roles ==
+
+AdminClient -> Controller: GET /api/roles
+Controller -> Service: getAllRoles()
+Service -> Repo: findAll()
+Repo -> DB: SELECT * FROM roles
+Controller --> AdminClient: HTTP 200 OK
+
+@enduml
+
+
+@startuml
+
+title Permission CRUD APIs
+
+actor AdminClient
+participant "PermissionController" as Controller
+participant "PermissionService" as Service
+participant "PermissionRepository" as Repo
+database "Database" as DB
+
+== Create Permission ==
+
+AdminClient -> Controller: POST /api/permissions (name)
+Controller -> Service: createPermission(data)
+Service -> Repo: save(permission)
+Repo -> DB: INSERT INTO permissions ...
+Controller --> AdminClient: HTTP 201 Created
+
+== Update Permission ==
+
+AdminClient -> Controller: PUT /api/permissions/{id}
+Controller -> Service: updatePermission(id, data)
+Service -> Repo: findById(id)
+Repo -> DB: SELECT * FROM permissions WHERE id = ?
+Service -> Repo: save(updatedPermission)
+Repo -> DB: UPDATE permissions SET ...
+Controller --> AdminClient: HTTP 200 OK
+
+== Delete Permission ==
+
+AdminClient -> Controller: DELETE /api/permissions/{id}
+Controller -> Service: deletePermission(id)
+Service -> Repo: deleteById(id)
+Repo -> DB: DELETE FROM permissions WHERE id = ?
+Controller --> AdminClient: HTTP 204 No Content
+
+== Get Permission By ID ==
+
+AdminClient -> Controller: GET /api/permissions/{id}
+Controller -> Service: getPermission(id)
+Service -> Repo: findById(id)
+Repo -> DB: SELECT * FROM permissions WHERE id = ?
+Controller --> AdminClient: HTTP 200 OK
+
+== List Permissions ==
+
+AdminClient -> Controller: GET /api/permissions
+Controller -> Service: getAllPermissions()
+Service -> Repo: findAll()
+Repo -> DB: SELECT * FROM permissions
+Controller --> AdminClient: HTTP 200 OK
+
+@enduml
+
+
+@startuml
+
+title Assign/Deassign Permission to/from Role API
+
+actor AdminClient
+participant "RoleController" as Controller
+participant "RoleService" as Service
+participant "RoleRepository" as RoleRepo
+participant "PermissionRepository" as PermissionRepo
+database "Database" as DB
+
+== Assign ==
+
+AdminClient -> Controller: POST /api/roles/{roleId}/permissions/{permissionId}
+Controller -> Service: assignPermissionToRole(roleId, permissionId)
+Service -> RoleRepo: findById(roleId)
+RoleRepo -> DB: SELECT * FROM roles WHERE id = ?
+Service -> PermissionRepo: findById(permissionId)
+PermissionRepo -> DB: SELECT * FROM permissions WHERE id = ?
+Service -> RoleRepo: save(role with permission added)
+RoleRepo -> DB: INSERT INTO role_permissions ...
+Service --> Controller: return success
+Controller --> AdminClient: HTTP 200 OK
+
+== Deassign ==
+
+AdminClient -> Controller: DELETE /api/roles/{roleId}/permissions/{permissionId}
+Controller -> Service: removePermissionFromRole(roleId, permissionId)
+Service -> RoleRepo: remove permission from role
+RoleRepo -> DB: DELETE FROM role_permissions WHERE ...
+Service --> Controller: return success
+Controller --> AdminClient: HTTP 200 OK
+
+@enduml
+
+
+@startuml
+
+title Global Exception Handling Flow
+
+actor Client
+participant "AnyController" as Controller
+participant "ServiceLayer" as Service
+participant "RepositoryLayer" as Repo
+participant "GlobalExceptionHandler" as ExceptionHandler
+database "Database" as DB
+
+Client -> Controller: API Request
+Controller -> Service: processRequest()
+Service -> Repo: findEntityById(id)
+Repo -> DB: SELECT ... WHERE id = ?
+DB --> Repo: null (not found)
+Repo --> Service: throw EntityNotFoundException
+Service --> Controller: propagate exception
+Controller --> ExceptionHandler: catch EntityNotFoundException
+ExceptionHandler -> ExceptionHandler: build ErrorResponse (code, message, timestamp)
+ExceptionHandler --> Client: HTTP 404 Not Found (with JSON error)
+
+@enduml
+
+@startuml
+
+title Logging Flow - Action/Activity Logging
+
+actor AdminClient
+participant "AnyController" as Controller
+participant "AnyService" as Service
+participant "LoggerService" as Logger
+participant "LogRepository" as LogRepo
+database "Database" as DB
+
+AdminClient -> Controller: Perform sensitive API action
+Controller -> Service: executeBusinessLogic()
+Service -> Logger: logAction(userId, actionType, details)
+Logger -> LogRepo: save(logEntry)
+LogRepo -> DB: INSERT INTO logs (user_id, action_type, message, timestamp)
+LogRepo --> Logger: success
+Service --> Controller: return result
+Controller --> AdminClient: HTTP 200 OK
+
+@enduml
+
+@startuml
+
+title JWT Authentication Filter - Request Flow
+
+actor Client
+participant "Request Filter" as Filter
+participant "JwtTokenProvider" as JWT
+participant "UserDetailsService" as UserService
+participant "UserRepository" as UserRepo
+database "Database" as DB
+
+Client -> Filter: Send HTTP request with Authorization: Bearer <token>
+Filter -> JWT: validateToken(token)
+JWT -> JWT: verify signature, expiration
+JWT --> Filter: userEmail (from claims)
+Filter -> UserService: loadUserByUsername(userEmail)
+UserService -> UserRepo: findByEmail(userEmail)
+UserRepo -> DB: SELECT * FROM users WHERE email = ?
+DB --> UserRepo: return User
+UserRepo --> UserService: return UserDetails
+UserService --> Filter: Authenticated UserDetails
+Filter -> Filter: set Authentication in SecurityContext
+Filter --> Controller: forward request
+
+@enduml
+
+
+@startuml
+
+title Login with JWT Stored in Cookie (Thymeleaf Flow)
+
+actor User
+participant "LoginController" as Controller
+participant "AuthService" as Service
+participant "UserRepository" as UserRepo
+participant "JwtTokenProvider" as JWT
+participant "HttpServletResponse" as Response
+database "Database" as DB
+
+User -> Controller: POST /login (email, password)
+Controller -> Service: authenticateUser(email, password)
+Service -> UserRepo: findByEmail(email)
+UserRepo -> DB: SELECT * FROM users WHERE email = ?
+DB --> UserRepo: return User
+Service -> Service: validatePassword(input, storedHash)
+Service -> JWT: generateToken(user)
+JWT --> Service: return JWT
+Service -> Controller: return token
+Controller -> Response: setCookie("Authorization", "Bearer <token>")
+Controller -> User: Redirect to /home
+
+@enduml
+
