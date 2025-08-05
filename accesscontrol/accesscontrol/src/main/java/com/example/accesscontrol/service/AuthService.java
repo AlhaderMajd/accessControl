@@ -3,34 +3,38 @@ package com.example.accesscontrol.service;
 import com.example.accesscontrol.dto.AuthRequest;
 import com.example.accesscontrol.dto.AuthResponse;
 import com.example.accesscontrol.entity.User;
+import com.example.accesscontrol.exception.*;
 import com.example.accesscontrol.repository.UserRepository;
 import com.example.accesscontrol.security.jwt.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.authentication.*;
-import org.springframework.security.core.Authentication;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 @Service
 @RequiredArgsConstructor
 public class AuthService {
 
-    private final AuthenticationManager authenticationManager;
-    private final JwtTokenProvider jwtTokenProvider;
     private final UserRepository userRepository;
+    private final JwtTokenProvider jwtTokenProvider;
+    private final PasswordEncoder passwordEncoder;
 
     public AuthResponse login(AuthRequest request) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+        User user = userRepository.findByEmail(request.getEmail()).orElseThrow(() -> new UserNotFoundException(request.getEmail()));
 
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new RuntimeException("User not found"));
+        if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            throw new InvalidCredentialsException();
+        }
 
-        String token = jwtTokenProvider.generateToken(request.getEmail());
+        if (!user.isEnabled()) {
+            throw new UserDisabledException();
+        }
+
+        String token = jwtTokenProvider.generateToken(user.getEmail());
 
         return AuthResponse.builder()
                 .token(token)
                 .userId(user.getId())
-                .role("USER") // just a placeholder
+                .role("USER") // Replace when role logic is ready
                 .build();
     }
 }
